@@ -1,0 +1,171 @@
+import tkinter as tk
+from tkinter import scrolledtext, messagebox
+import re
+
+class StudentBot:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("StudentBot v3.0")
+        self.root.geometry("700x600")
+        self.root.configure(bg="#f5f5f5")
+        
+        # Initialize complete student database
+        self.student_db = {
+            "S1001": {"name": "Aarav Sharma", "class": "12-A", "address": "Mumbai", 
+                     "phone": "9876543210", "marks": {2019: 85, 2020: 88, 2021: 90, 2022: 92, 2023: 94}},
+            "S1002": {"name": "Priya Patel", "class": "12-B", "address": "Delhi",
+                     "phone": "8765432109", "marks": {2019: 78, 2020: 82, 2021: 85, 2022: 88, 2023: 91}},
+            "S1003": {"name": "Rohan Singh", "class": "11-A", "address": "Bangalore",
+                     "phone": "7654321098", "marks": {2019: 92, 2020: 94, 2021: 96, 2022: 97, 2023: 98}},
+            "S1004": {"name": "Ananya Gupta", "class": "10-B", "address": "Chennai",
+                     "phone": "6543210987", "marks": {2019: 81, 2020: 84, 2021: 87, 2022: 89, 2023: 92}}
+        }
+        
+        self._setup_interface()
+        self._display_message("Bot: Welcome! I can show student details, marks, or contacts.\n"
+                            "Try: 'list all students' or 'show Priya's marks'", "system")
+
+    def _setup_interface(self):
+        """Set up the GUI components"""
+        # Header
+        header = tk.Label(self.root, text="Student Information System", 
+                         font=("Verdana", 16, "bold"), bg="#4682b4", fg="white")
+        header.pack(fill=tk.X, pady=(0,10))
+
+        # Chat display
+        self.chat_area = scrolledtext.ScrolledText(self.root, width=80, height=22,
+                                                 font=("Consolas", 10), wrap=tk.WORD)
+        self.chat_area.pack(padx=15, pady=(0,10))
+        self.chat_area.tag_config("user", foreground="blue")
+        self.chat_area.tag_config("bot", foreground="green")
+        self.chat_area.tag_config("system", foreground="gray")
+
+        # Input frame
+        input_frame = tk.Frame(self.root)
+        input_frame.pack(fill=tk.X, padx=15, pady=(0,10))
+
+        self.user_input = tk.Entry(input_frame, width=60, font=("Arial", 11))
+        self.user_input.pack(side=tk.LEFT, padx=5)
+        self.user_input.bind("<Return>", lambda e: self._process_query())
+
+        send_btn = tk.Button(input_frame, text="Send", command=self._process_query,
+                           bg="#5f9ea0", fg="white")
+        send_btn.pack(side=tk.LEFT)
+
+        # Help button
+        tk.Button(self.root, text="Help", command=self._show_help,
+                bg="#32cd32", fg="white").pack()
+
+    def _process_query(self):
+        """Handle user input and generate responses"""
+        query = self.user_input.get().strip()
+        self.user_input.delete(0, tk.END)
+
+        if not query:
+            return
+
+        self._display_message(f"You: {query}", "user")
+        response = self._generate_response(query.lower())
+        self._display_message(f"Bot: {response}\n", "bot")
+
+    def _generate_response(self, query):
+        """Generate appropriate response based on query"""
+        # Handle list requests
+        if re.search(r'\b(list|show|display|all students?)\b', query):
+            return self._get_student_list()
+        
+        # Handle marks requests
+        elif re.search(r'\b(marks?|grades?|scores?)\b', query):
+            return self._get_marks(query)
+        
+        # Handle contact requests
+        elif re.search(r'\b(contact|number|phone)\b', query):
+            return self._get_contact(query)
+        
+        # Handle info requests
+        elif re.search(r'\b(info|details?|about)\b', query):
+            return self._get_info(query)
+        
+        # Help command
+        elif "help" in query:
+            return self._get_help()
+        
+        else:
+            return ("I didn't understand. Try:\n"
+                   "- 'List all students'\n"
+                   "- 'Show marks for [name]'\n"
+                   "- 'What's [name]'s contact?'")
+
+    def _get_student_list(self):
+        """Generate formatted list of all students"""
+        student_list = []
+        for sid, data in self.student_db.items():
+            student_list.append(f"{sid}: {data['name']} (Class {data['class']})")
+        return "Registered Students:\n" + "\n".join(student_list)
+
+    def _get_marks(self, query):
+        """Retrieve marks for specific student"""
+        sid = self._find_student_id(query)
+        if not sid:
+            return "Which student? (Use name or ID)"
+        
+        year = re.search(r'\b(20\d\d)\b', query)
+        if year:
+            year = int(year.group())
+            if year in self.student_db[sid]["marks"]:
+                return f"{self.student_db[sid]['name']}'s {year} marks: {self.student_db[sid]['marks'][year]}%"
+            return f"No records for {year}"
+        
+        return (f"{self.student_db[sid]['name']}'s marks:\n" +
+               "\n".join(f"{yr}: {mark}%" for yr, mark in self.student_db[sid]["marks"].items()))
+
+    def _find_student_id(self, query):
+        """Find student by name or ID"""
+        for sid, data in self.student_db.items():
+            if (sid.lower() in query or 
+                data["name"].lower().split()[0] in query or 
+                data["name"].lower() in query):
+                return sid
+        return None
+
+    def _get_contact(self, query):
+        """Retrieve contact information"""
+        sid = self._find_student_id(query)
+        if not sid:
+            return "Which student? (Use name or ID)"
+        return f"{self.student_db[sid]['name']}'s contact: {self.student_db[sid]['phone']}"
+
+    def _get_info(self, query):
+        """Get student information"""
+        sid = self._find_student_id(query)
+        if not sid:
+            return "Which student? (Use name or ID)"
+        data = self.student_db[sid]
+        return (f"Student Details:\n"
+               f"Name: {data['name']}\n"
+               f"Class: {data['class']}\n"
+               f"Address: {data['address']}")
+
+    def _get_help(self):
+        """Show help examples"""
+        return ("Available Commands:\n"
+               "1. 'List all students'\n"
+               "2. 'Show [name]'s marks [year]'\n"
+               "3. 'What's [name]'s contact?'\n"
+               "4. 'Tell me about [name]'")
+
+    def _display_message(self, message, tag):
+        """Display message in chat area"""
+        self.chat_area.configure(state='normal')
+        self.chat_area.insert(tk.END, message + "\n", tag)
+        self.chat_area.configure(state='disabled')
+        self.chat_area.see(tk.END)
+
+    def _show_help(self):
+        """Display help dialog"""
+        messagebox.showinfo("Help", self._get_help())
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = StudentBot(root)
+    root.mainloop()
