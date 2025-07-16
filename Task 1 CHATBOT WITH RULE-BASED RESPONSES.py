@@ -1,171 +1,761 @@
 import tkinter as tk
-from tkinter import scrolledtext, messagebox
+from tkinter import scrolledtext, ttk
+from difflib import get_close_matches
+import random
 import re
 
-class StudentBot:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("StudentBot v3.0")
-        self.root.geometry("700x600")
-        self.root.configure(bg="#f5f5f5")
+class StudentChatbot:
+    def __init__(self, master):
+        self.master = master
+        self.master.title("Student Information System")
+        self.master.geometry("750x650")
+        self.setup_ui()
         
-        # Initialize complete student database
-        self.student_db = {
-            "S1001": {"name": "Aarav Sharma", "class": "12-A", "address": "Mumbai", 
-                     "phone": "9876543210", "marks": {2019: 85, 2020: 88, 2021: 90, 2022: 92, 2023: 94}},
-            "S1002": {"name": "Priya Patel", "class": "12-B", "address": "Delhi",
-                     "phone": "8765432109", "marks": {2019: 78, 2020: 82, 2021: 85, 2022: 88, 2023: 91}},
-            "S1003": {"name": "Rohan Singh", "class": "11-A", "address": "Bangalore",
-                     "phone": "7654321098", "marks": {2019: 92, 2020: 94, 2021: 96, 2022: 97, 2023: 98}},
-            "S1004": {"name": "Ananya Gupta", "class": "10-B", "address": "Chennai",
-                     "phone": "6543210987", "marks": {2019: 81, 2020: 84, 2021: 87, 2022: 89, 2023: 92}}
-        }
+        # Configure chat display tags
+        self.configure_tags()
         
-        self._setup_interface()
-        self._display_message("Bot: Welcome! I can show student details, marks, or contacts.\n"
-                            "Try: 'list all students' or 'show Priya's marks'", "system")
+        # Initialize student database
+        self.students = self.create_student_database()
+        
+        # Conversation state
+        self.current_context = None
+        self.pending_action = None
+        
+        # Show welcome message
+        self.show_welcome()
 
-    def _setup_interface(self):
-        """Set up the GUI components"""
-        # Header
-        header = tk.Label(self.root, text="Student Information System", 
-                         font=("Verdana", 16, "bold"), bg="#4682b4", fg="white")
-        header.pack(fill=tk.X, pady=(0,10))
-
-        # Chat display
-        self.chat_area = scrolledtext.ScrolledText(self.root, width=80, height=22,
-                                                 font=("Consolas", 10), wrap=tk.WORD)
-        self.chat_area.pack(padx=15, pady=(0,10))
-        self.chat_area.tag_config("user", foreground="blue")
-        self.chat_area.tag_config("bot", foreground="green")
-        self.chat_area.tag_config("system", foreground="gray")
-
+    def setup_ui(self):
+        """Create the main application interface"""
+        self.main_frame = ttk.Frame(self.master)
+        self.main_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
+        
+        # Chat display area
+        self.chat_display = scrolledtext.ScrolledText(
+            self.main_frame,
+            wrap=tk.WORD,
+            width=80,
+            height=28,
+            font=('Segoe UI', 11),
+            state='disabled'
+        )
+        self.chat_display.pack(fill=tk.BOTH, expand=True)
+        
         # Input frame
-        input_frame = tk.Frame(self.root)
-        input_frame.pack(fill=tk.X, padx=15, pady=(0,10))
+        input_frame = ttk.Frame(self.main_frame)
+        input_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        # User input field
+        self.user_input = ttk.Entry(
+            input_frame,
+            font=('Segoe UI', 12)
+        )
+        self.user_input.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
+        self.user_input.bind('<Return>', self.process_input)
+        
+        # Send button
+        send_btn = ttk.Button(
+            input_frame,
+            text="Send",
+            command=self.process_input
+        )
+        send_btn.pack(side=tk.RIGHT)
+        
+        # Make input field focused by default
+        self.user_input.focus_set()
 
-        self.user_input = tk.Entry(input_frame, width=60, font=("Arial", 11))
-        self.user_input.pack(side=tk.LEFT, padx=5)
-        self.user_input.bind("<Return>", lambda e: self._process_query())
+    def configure_tags(self):
+        """Configure text tags for chat display"""
+        self.chat_display.tag_config('system', foreground='#1E88E5', font=('Segoe UI', 11, 'bold'))
+        self.chat_display.tag_config('user', foreground='#43A047', font=('Segoe UI', 11))
+        self.chat_display.tag_config('alert', foreground='#E53935', font=('Segoe UI', 11))
+        self.chat_display.tag_config('success', foreground='#7CB342', font=('Segoe UI', 11))
 
-        send_btn = tk.Button(input_frame, text="Send", command=self._process_query,
-                           bg="#5f9ea0", fg="white")
-        send_btn.pack(side=tk.LEFT)
+    def create_student_database(self):
+        """Create a comprehensive student database with sample data"""
+        students = [
+            {
+                'id': 101,
+                'name': 'Alex Johnson',
+                'class': '12A',
+                'grades': {
+                    'Math': {2020: 85, 2021: 88, 2022: 90},
+                    'Science': {2020: 82, 2021: 85, 2022: 87},
+                    'English': {2020: 78, 2021: 82, 2022: 83}
+                },
+                'contact': 'alex.johnson@school.edu',
+                'address': '123 Maple Street',
+                'attendance': {2020: 92, 2021: 88, 2022: 95},
+                'extracurricular': ['Debate Club', 'Basketball']
+            },
+            {
+                'id': 102,
+                'name': 'Sam Wilson',
+                'class': '11B',
+                'grades': {
+                    'Math': {2020: 92, 2021: 85, 2022: 82},
+                    'Science': {2020: 94, 2021: 89, 2022: 90},
+                    'English': {2020: 85, 2021: 82, 2022: 84}
+                },
+                'contact': 'sam.wilson@school.edu',
+                'address': '456 Oak Avenue',
+                'attendance': {2020: 85, 2021: 90, 2022: 88},
+                'extracurricular': ['Science Club', 'Robotics']
+            },
+            {
+                'id': 103,
+                'name': 'Taylor Kim',
+                'class': '12A',
+                'grades': {
+                    'Math': {2020: 78, 2021: 82, 2022: 85},
+                    'Science': {2020: 85, 2021: 88, 2022: 90},
+                    'English': {2020: 92, 2021: 89, 2022: 94}
+                },
+                'contact': 'taylor.kim@school.edu',
+                'address': '789 Pine Road',
+                'attendance': {2020: 90, 2021: 92, 2022: 93},
+                'extracurricular': ['Student Council', 'Drama Club']
+            },
+            {
+                'id': 104,
+                'name': 'Jordan Chen',
+                'class': '11B',
+                'grades': {
+                    'Math': {2020: 88, 2021: 90, 2022: 93},
+                    'Science': {2020: 82, 2021: 85, 2022: 88},
+                    'English': {2020: 78, 2021: 81, 2022: 84}
+                },
+                'contact': 'jordan.chen@school.edu',
+                'address': '321 Elm Street',
+                'attendance': {2020: 89, 2021: 91, 2022: 93},
+                'extracurricular': ['Music Band', 'Chess Club']
+            },
+            {
+                'id': 105,
+                'name': 'Morgan Davis',
+                'class': '12B',
+                'grades': {
+                    'Math': {2020: 85, 2021: 88, 2022: 91},
+                    'Science': {2020: 92, 2021: 89, 2022: 93},
+                    'English': {2020: 87, 2021: 85, 2022: 89}
+                },
+                'contact': 'morgan.davis@school.edu',
+                'address': '654 Birch Lane',
+                'attendance': {2020: 94, 2021: 92, 2022: 95},
+                'extracurricular': ['Debate Club', 'Yearbook']
+            }
+        ]
+        return students
 
-        # Help button
-        tk.Button(self.root, text="Help", command=self._show_help,
-                bg="#32cd32", fg="white").pack()
+    def show_welcome(self):
+        """Display welcome message and help information"""
+        welcome_msg = """╔═══════════════════════════╗
+║  Student Information System  ║
+╚═══════════════════════════╝
 
-    def _process_query(self):
-        """Handle user input and generate responses"""
+Welcome! I can help you with:
+
+• Student details and records
+• Academic performance tracking
+• Class statistics and averages
+• Contact information
+• Extracurricular activities
+
+Just ask naturally, like:
+"Show me Alex's grades in Math."
+"What's the average for class 12A?"
+"List all students."
+
+Type 'help' anytime for assistance.
+"""
+        self.display_message('system', welcome_msg)
+
+    def display_message(self, tag, message):
+        """Display a message in the chat window"""
+        self.chat_display.config(state='normal')
+        self.chat_display.insert(tk.END, message + '\n\n', tag)
+        self.chat_display.config(state='disabled')
+        self.chat_display.see(tk.END)
+
+    def process_input(self, event=None):
+        """Process user input and generate response"""
         query = self.user_input.get().strip()
-        self.user_input.delete(0, tk.END)
-
         if not query:
             return
+            
+        self.display_message('user', f"You: {query}")
+        self.user_input.delete(0, tk.END)
+        
+        query = query.lower()
+        
+        # Handle conversation context if set
+        if self.current_context:
+            self.handle_context(query)
+            return
+        
+        # Process greetings
+        if self.check_greeting(query):
+            return
+            
+        # Process help request
+        if 'help' in query:
+            self.show_help_menu()
+            return
+            
+        # Process student details requests
+        if any(word in query for word in ['detail', 'info', 'about', 'contact']):
+            self.process_student_query(query)
+            return
+            
+        # Process grade/marks requests
+        if any(word in query for word in ['grade', 'mark', 'score', 'result']):
+            self.process_grade_query(query)
+            return
+            
+        # Process class statistics
+        if any(word in query for word in ['average', 'statistics', 'performance']):
+            self.process_statistics_query(query)
+            return
+            
+        # Process list requests
+        if any(word in query for word in ['list', 'show', 'all']):
+            self.process_list_query(query)
+            return
+            
+        # Process attendance requests
+        if 'attendance' in query:
+            self.process_attendance_query(query)
+            return
+            
+        # Process extracurricular requests
+        if any(word in query for word in ['activity', 'club', 'extracurricular']):
+            self.process_activity_query(query)
+            return
+            
+        # Default response for unrecognized queries
+        self.default_response(query)
 
-        self._display_message(f"You: {query}", "user")
-        response = self._generate_response(query.lower())
-        self._display_message(f"Bot: {response}\n", "bot")
+    def check_greeting(self, query):
+        """Check for and respond to greetings"""
+        greetings = {
+            'hi': ["Hello! How can I assist you today?"],
+            'hello': ["Hi there! What would you like to know?"],
+            'hey': ["Hey! Ready to explore student information?"],
+            'greetings': ["Greetings! How may I help you?"]
+        }
+        
+        for word in greetings:
+            if word in query:
+                response = random.choice(greetings[word])
+                self.display_message('system', f"Bot: {response}")
+                return True
+        return False
 
-    def _generate_response(self, query):
-        """Generate appropriate response based on query"""
-        # Handle list requests
-        if re.search(r'\b(list|show|display|all students?)\b', query):
-            return self._get_student_list()
+    def show_help_menu(self):
+        """Display the help menu with available commands"""
+        help_msg = """╔════════════ Help Menu ═══════════╗
+║ 1. Student Details              ║
+║   - "Tell me about [student]"   ║
+║   - "[Name]'s contact info"     ║
+║   - "Show [ID] details"         ║
+║                                 ║
+║ 2. Academic Information         ║
+║   - "[Name]'s math grades"      ║
+║   - "Grades for [ID] in 2022"   ║
+║   - "Show [student]'s results"  ║
+║                                 ║
+║ 3. Class Statistics             ║
+║   - "Class 12A average"         ║
+║   - "Science performance 11B"   ║
+║   - "Attendance stats"          ║
+║                                 ║
+║ 4. General                      ║
+║   - "List all students"         ║
+║   - "Show extracurriculars"     ║
+║   - "Exit"                      ║
+╚═════════════════════════════════╝
+"""
+        self.display_message('system', help_msg)
+
+    def process_student_query(self, query):
+        """Process queries about student details"""
+        # Extract student identifier (name or ID)
+        identifier = None
         
-        # Handle marks requests
-        elif re.search(r'\b(marks?|grades?|scores?)\b', query):
-            return self._get_marks(query)
-        
-        # Handle contact requests
-        elif re.search(r'\b(contact|number|phone)\b', query):
-            return self._get_contact(query)
-        
-        # Handle info requests
-        elif re.search(r'\b(info|details?|about)\b', query):
-            return self._get_info(query)
-        
-        # Help command
-        elif "help" in query:
-            return self._get_help()
-        
+        # Check if query contains a student ID
+        id_match = re.search(r'\d{3}', query)
+        if id_match:
+            identifier = int(id_match.group())
         else:
-            return ("I didn't understand. Try:\n"
-                   "- 'List all students'\n"
-                   "- 'Show marks for [name]'\n"
-                   "- 'What's [name]'s contact?'")
-
-    def _get_student_list(self):
-        """Generate formatted list of all students"""
-        student_list = []
-        for sid, data in self.student_db.items():
-            student_list.append(f"{sid}: {data['name']} (Class {data['class']})")
-        return "Registered Students:\n" + "\n".join(student_list)
-
-    def _get_marks(self, query):
-        """Retrieve marks for specific student"""
-        sid = self._find_student_id(query)
-        if not sid:
-            return "Which student? (Use name or ID)"
+            # Try to find a student name
+            for student in self.students:
+                if student['name'].lower() in query:
+                    identifier = student['id']
+                    break
+            
+            if not identifier:
+                # Try to extract possible name
+                name_parts = [word.title() for word in query.split() if word.isalpha()]
+                possible_name = ' '.join(name_parts[:2]) if len(name_parts) > 1 else name_parts[0] if name_parts else None
+                
+                if possible_name:
+                    identifier = next((s['id'] for s in self.students if possible_name in s['name']), None)
         
-        year = re.search(r'\b(20\d\d)\b', query)
-        if year:
-            year = int(year.group())
-            if year in self.student_db[sid]["marks"]:
-                return f"{self.student_db[sid]['name']}'s {year} marks: {self.student_db[sid]['marks'][year]}%"
-            return f"No records for {year}"
+        if identifier:
+            student = next((s for s in self.students if s['id'] == identifier), None)
+            if student:
+                self.display_student_details(student)
+            else:
+                self.display_message('alert', "Bot: Student not found. Please check the ID or name.")
+        else:
+            self.current_context = 'student_query'
+            self.pending_action = 'get_details'
+            self.display_message('system', "Bot: Which student would you like information about? Please provide a name or ID.")
+
+    def display_student_details(self, student):
+        """Display comprehensive student details"""
+        details = f"""
+╔══════════ Student Details ══════════╗
+║ ID: {student['id']:<35} ║
+║ Name: {student['name']:<32} ║
+║ Class: {student['class']:<33} ║
+║ Contact: {student['contact']:<30} ║
+║ Address: {student['address']:<31} ║
+╟─────────────────────────────────────╢
+║ Grades:                             ║"""
         
-        return (f"{self.student_db[sid]['name']}'s marks:\n" +
-               "\n".join(f"{yr}: {mark}%" for yr, mark in self.student_db[sid]["marks"].items()))
+        for subject, grades in student['grades'].items():
+            details += f"\n║   {subject}: {', '.join(f'{yr}={score}' for yr, score in grades.items())}"
+        
+        details += f"\n║                                     ║"
+        details += f"\n║ Attendance:                        ║"
+        for year, percent in student['attendance'].items():
+            details += f"\n║   {year}: {percent}% attendance{' '*(18-len(str(percent)))}║"
+        
+        details += f"\n║                                     ║"
+        details += f"\n║ Activities: {', '.join(student['extracurricular']):<26} ║"
+        details += "\n╚═════════════════════════════════════╝"
+        
+        self.display_message('success', details)
 
-    def _find_student_id(self, query):
-        """Find student by name or ID"""
-        for sid, data in self.student_db.items():
-            if (sid.lower() in query or 
-                data["name"].lower().split()[0] in query or 
-                data["name"].lower() in query):
-                return sid
-        return None
+    def process_grade_query(self, query):
+        """Process queries about student grades"""
+        # Extract components from query
+        student_id = None
+        subject = None
+        year = None
+        
+        # Try to find a student ID
+        id_match = re.search(r'\d{3}', query)
+        if id_match:
+            student_id = int(id_match.group())
+        else:
+            # Try to find a student name
+            for student in self.students:
+                if student['name'].lower() in query:
+                    student_id = student['id']
+                    break
+            
+            if not student_id:
+                # Try to extract possible name
+                name_parts = [word.title() for word in query.split() if word.isalpha()]
+                possible_name = ' '.join(name_parts[:2]) if len(name_parts) > 1 else name_parts[0] if name_parts else None
+                
+                if possible_name:
+                    student_id = next((s['id'] for s in self.students if possible_name in s['name']), None)
+        
+        # Try to find a subject
+        subjects = ['math', 'science', 'english']
+        for subj in subjects:
+            if subj in query:
+                subject = subj.title()
+                break
+        
+        # Try to find a year
+        year_match = re.search(r'20[0-9]{2}', query)
+        if year_match:
+            year = int(year_match.group())
+        
+        if student_id:
+            student = next((s for s in self.students if s['id'] == student_id), None)
+            if student:
+                if subject and year:
+                    # Display specific grade (subject + year)
+                    grade = student['grades'].get(subject, {}).get(year, None)
+                    if grade:
+                        self.display_message('success', 
+                            f"Bot: {student['name']}'s {subject} grade in {year}: {grade}")
+                    else:
+                        self.display_message('alert', 
+                            f"Bot: Grade record not found for {subject} in {year}")
+                elif subject:
+                    # Display all years for a subject
+                    grades = student['grades'].get(subject, {})
+                    if grades:
+                        grade_str = ', '.join(f"{yr}={score}" for yr, score in grades.items())
+                        self.display_message('success', 
+                            f"Bot: {student['name']}'s {subject} grades: {grade_str}")
+                    else:
+                        self.display_message('alert', 
+                            f"Bot: No grade records found for {subject}")
+                elif year:
+                    # Display all subjects for a year
+                    grades = {subj: scores.get(year, None) 
+                            for subj, scores in student['grades'].items()}
+                    if any(grade is not None for grade in grades.values()):
+                        grade_str = '\n'.join(f"   {subj}: {score}" 
+                                            for subj, score in grades.items() 
+                                            if score is not None)
+                        self.display_message('success', 
+                            f"Bot: {student['name']}'s grades in {year}:\n{grade_str}")
+                    else:
+                        self.display_message('alert', 
+                            f"Bot: No grade records found for {year}")
+                else:
+                    # Display simplified grade overview
+                    grade_overview = '\n'.join(
+                        f"   {subj}: {min(scores.values())}-{max(scores.values())}" 
+                        for subj, scores in student['grades'].items()
+                    )
+                    self.display_message('success', 
+                        f"Bot: {student['name']}'s grade range:\n{grade_overview}")
+            else:
+                self.display_message('alert', "Bot: Student not found. Please check the ID or name.")
+        else:
+            self.current_context = 'grade_query'
+            self.pending_action = 'get_grades'
+            self.display_message('system', 
+                "Bot: Could you please specify which student you're asking about?")
 
-    def _get_contact(self, query):
-        """Retrieve contact information"""
-        sid = self._find_student_id(query)
-        if not sid:
-            return "Which student? (Use name or ID)"
-        return f"{self.student_db[sid]['name']}'s contact: {self.student_db[sid]['phone']}"
+    def process_statistics_query(self, query):
+        """Process requests for class statistics and averages"""
+        # Extract class identifier if present
+        class_id = None
+        if '12' in query or '12th' in query.lower():
+            class_id = '12'
+        elif '11' in query or '11th' in query.lower():
+            class_id = '11'
+        
+        # Extract subject if present
+        subject = None
+        subjects = ['math', 'science', 'english']
+        for subj in subjects:
+            if subj in query:
+                subject = subj.title()
+                break
+        
+        # Extract year if present
+        year = None
+        year_match = re.search(r'20[0-9]{2}', query)
+        if year_match:
+            year = int(year_match.group())
+        
+        if class_id:
+            # Calculate statistics for the specified class
+            class_students = [s for s in self.students if s['class'].startswith(class_id)]
+            
+            if not class_students:
+                self.display_message('alert', f"Bot: No students found in class {class_id}")
+                return
+            
+            if subject and year:
+                # Subject average for specific year
+                grades = [s['grades'].get(subject, {}).get(year, 0) 
+                         for s in class_students]
+                if any(grades):
+                    avg = sum(grades) / len([g for g in grades if g > 0])
+                    self.display_message('success', 
+                        f"Bot: Class {class_id} {subject} average in {year}: {avg:.1f}")
+                else:
+                    self.display_message('alert', 
+                        f"Bot: No grade records found for {subject} in {year}")
+            elif subject:
+                # Overall subject average
+                grades = []
+                for student in class_students:
+                    grades.extend(student['grades'].get(subject, {}).values())
+                if grades:
+                    avg = sum(grades) / len(grades)
+                    self.display_message('success', 
+                        f"Bot: Class {class_id} overall {subject} average: {avg:.1f}")
+                else:
+                    self.display_message('alert', 
+                        f"Bot: No grade records found for {subject}")
+            elif year:
+                # Overall class average for year
+                grades = []
+                for student in class_students:
+                    grades.extend(v.get(year, 0) 
+                                for v in student['grades'].values())
+                if any(grades):
+                    avg = sum(grades) / len([g for g in grades if g > 0])
+                    self.display_message('success', 
+                        f"Bot: Class {class_id} overall average in {year}: {avg:.1f}")
+                else:
+                    self.display_message('alert', 
+                        f"Bot: No grade records found for {year}")
+            else:
+                # Overall class average
+                grades = []
+                for student in class_students:
+                    for subject_grades in student['grades'].values():
+                        grades.extend(subject_grades.values())
+                avg = sum(grades) / len(grades)
+                self.display_message('success', 
+                    f"Bot: Class {class_id} overall average: {avg:.1f}")
+        else:
+            # No class specified - show school-wide statistics
+            if subject and year:
+                # School-wide subject average for year
+                grades = []
+                for student in self.students:
+                    if subject in student['grades'] and year in student['grades'][subject]:
+                        grades.append(student['grades'][subject][year])
+                if grades:
+                    avg = sum(grades) / len(grades)
+                    self.display_message('success', 
+                        f"Bot: School-wide {subject} average in {year}: {avg:.1f}")
+                else:
+                    self.display_message('alert', 
+                        f"Bot: No grade records found for {subject} in {year}")
+            elif subject:
+                # School-wide subject average all years
+                grades = []
+                for student in self.students:
+                    grades.extend(student['grades'].get(subject, {}).values())
+                if grades:
+                    avg = sum(grades) / len(grades)
+                    self.display_message('success', 
+                        f"Bot: School-wide {subject} average: {avg:.1f}")
+                else:
+                    self.display_message('alert', 
+                        f"Bot: No grade records found for {subject}")
+            elif year:
+                # School-wide overall average for year
+                grades = []
+                for student in self.students:
+                    for subject_grades in student['grades'].values():
+                        if year in subject_grades:
+                            grades.append(subject_grades[year])
+                if grades:
+                    avg = sum(grades) / len(grades)
+                    self.display_message('success', 
+                        f"Bot: School-wide average in {year}: {avg:.1f}")
+                else:
+                    self.display_message('alert', 
+                        f"Bot: No grade records found for {year}")
+            else:
+                # School-wide overall average
+                all_grades = []
+                for student in self.students:
+                    for subject_grades in student['grades'].values():
+                        all_grades.extend(subject_grades.values())
+                avg = sum(all_grades) / len(all_grades)
+                self.display_message('success', 
+                    f"Bot: School-wide overall average: {avg:.1f}")
 
-    def _get_info(self, query):
-        """Get student information"""
-        sid = self._find_student_id(query)
-        if not sid:
-            return "Which student? (Use name or ID)"
-        data = self.student_db[sid]
-        return (f"Student Details:\n"
-               f"Name: {data['name']}\n"
-               f"Class: {data['class']}\n"
-               f"Address: {data['address']}")
+    def process_list_query(self, query):
+        """Process requests to list students or information"""
+        if 'student' in query or 'all' in query:
+            # List all students
+            student_list = "\n".join(
+                f"{s['id']}: {s['name']} ({s['class']})"
+                for s in self.students
+            )
+            self.display_message('success', f"Bot: All students:\n{student_list}")
+        elif 'activity' in query or 'club' in query:
+            # List all extracurricular activities
+            activities = set()
+            for student in self.students:
+                activities.update(student['extracurricular'])
+            activity_list = "\n".join(sorted(activities))
+            self.display_message('success', f"Bot: All extracurricular activities:\n{activity_list}")
+        elif 'subject' in query or 'class' in query:
+            # List available subjects
+            subjects = set()
+            for student in self.students:
+                subjects.update(student['grades'].keys())
+            subject_list = "\n".join(sorted(subjects))
+            self.display_message('success', f"Bot: Available subjects:\n{subject_list}")
+        else:
+            self.display_message('system', 
+                "Bot: You can ask to list 'students', 'activities', or 'subjects'")
 
-    def _get_help(self):
-        """Show help examples"""
-        return ("Available Commands:\n"
-               "1. 'List all students'\n"
-               "2. 'Show [name]'s marks [year]'\n"
-               "3. 'What's [name]'s contact?'\n"
-               "4. 'Tell me about [name]'")
+    def process_attendance_query(self, query):
+        """Process queries about student attendance"""
+        # Extract student identifier if present
+        student_id = None
+        id_match = re.search(r'\d{3}', query)
+        if id_match:
+            student_id = int(id_match.group())
+        else:
+            # Try to find a student name
+            for student in self.students:
+                if student['name'].lower() in query:
+                    student_id = student['id']
+                    break
+        
+        # Extract year if present
+        year = None
+        year_match = re.search(r'20[0-9]{2}', query)
+        if year_match:
+            year = int(year_match.group())
+        
+        if student_id:
+            student = next((s for s in self.students if s['id'] == student_id), None)
+            if student:
+                if year:
+                    # Show attendance for specific year
+                    attendance = student['attendance'].get(year, None)
+                    if attendance:
+                        self.display_message('success', 
+                            f"Bot: {student['name']}'s attendance in {year}: {attendance}%")
+                    else:
+                        self.display_message('alert', 
+                            f"Bot: No attendance record found for {year}")
+                else:
+                    # Show all attendance records
+                    attendance_list = "\n".join(
+                        f"   {yr}: {percent}%"
+                        for yr, percent in student['attendance'].items()
+                    )
+                    self.display_message('success', 
+                        f"Bot: {student['name']}'s attendance records:\n{attendance_list}")
+            else:
+                self.display_message('alert', "Bot: Student not found. Please check the ID or name.")
+        else:
+            # No student specified - show class/school attendance
+            if '12' in query or '12th' in query.lower():
+                class_id = '12'
+                class_name = '12th grade'
+            elif '11' in query or '11th' in query.lower():
+                class_id = '11'
+                class_name = '11th grade'
+            else:
+                class_id = None
+                class_name = 'school'
+            
+            if year:
+                # Calculate average attendance for class/school in year
+                attendances = []
+                for student in self.students:
+                    if not class_id or student['class'].startswith(class_id):
+                        if year in student['attendance']:
+                            attendances.append(student['attendance'][year])
+                
+                if attendances:
+                    avg = sum(attendances) / len(attendances)
+                    self.display_message('success', 
+                        f"Bot: {class_name} average attendance in {year}: {avg:.1f}%")
+                else:
+                    self.display_message('alert', 
+                        f"Bot: No attendance records found for {year}")
+            else:
+                # Calculate overall average attendance
+                attendances = []
+                for student in self.students:
+                    if not class_id or student['class'].startswith(class_id):
+                        attendances.extend(student['attendance'].values())
+                
+                avg = sum(attendances) / len(attendances)
+                self.display_message('success', 
+                    f"Bot: {class_name} overall attendance average: {avg:.1f}%")
 
-    def _display_message(self, message, tag):
-        """Display message in chat area"""
-        self.chat_area.configure(state='normal')
-        self.chat_area.insert(tk.END, message + "\n", tag)
-        self.chat_area.configure(state='disabled')
-        self.chat_area.see(tk.END)
+    def process_activity_query(self, query):
+        """Process queries about extracurricular activities"""
+        # Try to find activity name
+        activities = set()
+        for student in self.students:
+            activities.update(student['extracurricular'])
+        
+        matched_activity = None
+        for activity in activities:
+            if activity.lower() in query.lower():
+                matched_activity = activity
+                break
+        
+        # Extract student identifier if present
+        student_id = None
+        id_match = re.search(r'\d{3}', query)
+        if id_match:
+            student_id = int(id_match.group())
+        else:
+            # Try to find a student name
+            for student in self.students:
+                if student['name'].lower() in query:
+                    student_id = student['id']
+                    break
+        
+        if matched_activity:
+            # Show students in this activity
+            participants = [
+                s['name'] for s in self.students
+                if matched_activity in s['extracurricular']
+            ]
+            
+            if participants:
+                participant_list = "\n".join(participants)
+                self.display_message('success', 
+                    f"Bot: Students in {matched_activity}:\n{participant_list}")
+            else:
+                self.display_message('alert', 
+                    f"Bot: No students found in {matched_activity}")
+        elif student_id:
+            # Show student's activities
+            student = next((s for s in self.students if s['id'] == student_id), None)
+            if student:
+                if student['extracurricular']:
+                    activity_list = "\n".join(student['extracurricular'])
+                    self.display_message('success', 
+                        f"Bot: {student['name']} participates in:\n{activity_list}")
+                else:
+                    self.display_message('alert', 
+                        f"Bot: {student['name']} is not in any activities")
+            else:
+                self.display_message('alert', 
+                    "Bot: Student not found. Please check the ID or name.")
+        else:
+            # Show all activities
+            activity_list = "\n".join(sorted(activities))
+            self.display_message('success', 
+                f"Bot: All extracurricular activities:\n{activity_list}")
 
-    def _show_help(self):
-        """Display help dialog"""
-        messagebox.showinfo("Help", self._get_help())
+    def handle_context(self, query):
+        """Handle follow-up responses in conversation context"""
+        if self.current_context == 'student_query':
+            if self.pending_action == 'get_details':
+                self.process_student_query(query)
+        
+        elif self.current_context == 'grade_query':
+            if self.pending_action == 'get_grades':
+                self.process_grade_query(query)
+        
+        # Reset context 
+        self.current_context = None
+        self.pending_action = None
+
+    def default_response(self, query):
+        """Provide a default response for unrecognized queries"""
+        # Try to find similar student names
+        name_parts = [word.title() for word in query.split() if word.isalpha()]
+        if len(name_parts) >= 2:
+            possible_name = ' '.join(name_parts[:2])
+            all_names = [s['name'] for s in self.students]
+            matches = get_close_matches(possible_name, all_names, n=1, cutoff=0.6)
+            
+            if matches:
+                self.display_message('system', 
+                    f"Bot: Did you mean '{matches[0]}'? Try asking about them specifically.")
+                return
+        
+        # Default unknown response
+        responses = [
+            "I'm not sure I understand. Could you rephrase that?",
+            "I don't have information about that. Try asking about students or grades.",
+            "Please ask about student records or school information."
+        ]
+        self.display_message('alert', f"Bot: {random.choice(responses)}\n(Type 'help' for options)")
 
 if __name__ == "__main__":
     root = tk.Tk()
-    app = StudentBot(root)
+    chatbot = StudentChatbot(root)
     root.mainloop()
